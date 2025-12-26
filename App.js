@@ -1,269 +1,352 @@
 import React, { useState } from 'react';
-import { Heart, Sparkles, Cake, Music, Camera } from 'lucide-react';
-import momPhoto from './mom2.jpeg';
+import { Upload, MessageCircle, Brain, BookOpen, Sparkles, X, Send } from 'lucide-react';
 
-export default function MomTribute() {
-  const [candlesBlown, setCandlesBlown] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
+export default function StudyBuddy() {
+  const [activeTab, setActiveTab] = useState('upload');
+  const [files, setFiles] = useState([]);
+  const [summary, setSummary] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [currentFile, setCurrentFile] = useState(null);
+  const [flashcards, setFlashcards] = useState([]);
 
-  const blowCandles = () => {
-    setCandlesBlown(true);
-    setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 3000);
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+      const text = event.target.result;
+      const fileObj = {
+        id: Date.now(),
+        name: file.name,
+        content: text,
+        uploadDate: new Date().toLocaleDateString()
+      };
+      
+      setFiles(prev => [...prev, fileObj]);
+      setCurrentFile(fileObj);
+      
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1000,
+            messages: [{
+              role: 'user',
+              content: `Summarize these study notes in a clear, concise way with key points:\n\n${text.substring(0, 3000)}`
+            }]
+          })
+        });
+        
+        const data = await response.json();
+        const summaryText = data.content[0].text;
+        setSummary(summaryText);
+        setActiveTab('summary');
+      } catch (err) {
+        setSummary('Error generating summary. Please try again.');
+      }
+      
+      setLoading(false);
+    };
+    
+    reader.readAsText(file);
   };
 
-  const funFacts = [
-    { icon: "🎂", label: "Years of Awesomeness", value: "60 (but looks 36!)" },
-    { icon: "🍈", label: "Favorite Food", value: "Seethafalam" },
-    { icon: "☎️", label: "Favorite Hobby", value: "Talking with sisters" },
-    { icon: "😊", label: "Secret Hobby", value: "Scolding me (which is fun)" },
-    { icon: "💪", label: "Superpower", value: "Making me smile while scolding" },
-    { icon: "✨", label: "Age Mystery", value: "60 yet 36!" }
-  ];
+  const handleChat = async () => {
+    if (!chatInput.trim() || !currentFile) return;
+    
+    const userMsg = { role: 'user', text: chatInput };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatInput('');
+    setLoading(true);
 
-  const reasons = [
-    { emoji: "🤗", text: "Your warm hugs that fix everything" },
-    { emoji: "🍳", text: "The delicious food you make with love" },
-    { emoji: "💝", text: "Your endless patience and understanding" },
-    { emoji: "😂", text: "The way you scold me but still make me smile" },
-    { emoji: "🌟", text: "Your strength that inspires us every day" },
-    { emoji: "❤️", text: "Your unconditional love for our family" },
-    { emoji: "🎵", text: "Your cheerful voice in the morning" },
-    { emoji: "🙏", text: "Your wisdom and life lessons" },
-    { emoji: "✨", text: "The magic you bring to every moment" },
-    { emoji: "🏡", text: "Making our house feel like home" },
-    { emoji: "📞", text: "Long calls with mausinamma that make you happy" },
-    { emoji: "🌺", text: "Your beautiful smile that lights up the room" }
-  ];
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: `Based on these study notes, answer this question: ${chatInput}\n\nNotes: ${currentFile.content.substring(0, 2000)}`
+          }]
+        })
+      });
+      
+      const data = await response.json();
+      const aiMsg = { role: 'assistant', text: data.content[0].text };
+      setChatMessages(prev => [...prev, aiMsg]);
+    } catch (err) {
+      const errorMsg = { role: 'assistant', text: 'Sorry, I encountered an error. Please try again.' };
+      setChatMessages(prev => [...prev, errorMsg]);
+    }
+    
+    setLoading(false);
+  };
 
-  const memories = [
-  { title: "Family Moment", src: "/mom3.jpeg" },
-  { title: "Happy Times", src: "./mom6.jpeg" },
-  { title: "Special Day", src: "./mom5.jpeg" },
-  { title: "With Sisters", src: "./mom4.jpeg" },
-  { title: "Celebration", src: "./mom7.jpeg" },
-  { title: "Sweet Memory", src: "./mom8.jpeg" }
-];
+  const generateFlashcards = async () => {
+    if (!currentFile) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: `Create 5 flashcards from these notes. Return ONLY valid JSON in this exact format with no other text:
+[{"question": "...", "answer": "..."}]
+
+Notes: ${currentFile.content.substring(0, 2000)}`
+          }]
+        })
+      });
+      
+      const data = await response.json();
+      let text = data.content[0].text.trim();
+      text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const cards = JSON.parse(text);
+      setFlashcards(cards);
+      setActiveTab('flashcards');
+    } catch (err) {
+      console.error('Flashcard error:', err);
+    }
+    setLoading(false);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-indigo-100">
-      {/* Confetti Effect */}
-      {showConfetti && (
-        <div className="fixed inset-0 pointer-events-none z-50">
-          {[...Array(50)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute animate-ping"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 0.5}s`,
-                fontSize: '24px'
-              }}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <header className="text-center mb-12">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Brain className="w-12 h-12 text-indigo-600" />
+            <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              StudyAI
+            </h1>
+          </div>
+          <p className="text-gray-600 text-lg">Your AI-powered study companion</p>
+        </header>
+
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+          <div className="flex gap-4 mb-8 border-b border-gray-200 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('upload')}
+              className={`flex items-center gap-2 px-6 py-3 font-medium transition-all ${
+                activeTab === 'upload'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
-              {['🎉', '🎊', '✨', '🎈', '💝'][Math.floor(Math.random() * 5)]}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Hero Section */}
-      <section className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          {[...Array(20)].map((_, i) => (
-            <Heart
-              key={i}
-              className="absolute animate-pulse"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 2}s`
-              }}
-              size={30}
-            />
-          ))}
-        </div>
-        
-        <div className="text-center z-10 animate-fade-in">
-          <div className="mb-8">
-            <Sparkles className="inline-block text-yellow-500 animate-spin-slow" size={48} />
+              <Upload className="w-5 h-5" />
+              Upload Notes
+            </button>
+            <button
+              onClick={() => setActiveTab('summary')}
+              className={`flex items-center gap-2 px-6 py-3 font-medium transition-all ${
+                activeTab === 'summary'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              disabled={!summary}
+            >
+              <BookOpen className="w-5 h-5" />
+              Summary
+            </button>
+            <button
+              onClick={() => setActiveTab('chat')}
+              className={`flex items-center gap-2 px-6 py-3 font-medium transition-all ${
+                activeTab === 'chat'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              disabled={!currentFile}
+            >
+              <MessageCircle className="w-5 h-5" />
+              Ask Questions
+            </button>
+            <button
+              onClick={() => setActiveTab('flashcards')}
+              className={`flex items-center gap-2 px-6 py-3 font-medium transition-all ${
+                activeTab === 'flashcards'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              disabled={!currentFile}
+            >
+              <Sparkles className="w-5 h-5" />
+              Flashcards
+            </button>
           </div>
-          
-          {/* Photo Placeholder */}
-          {/* Photo Placeholder */}
-<div className="mb-8 mx-auto w-64 h-64 bg-gradient-to-br from-pink-200 to-purple-300 rounded-full flex items-center justify-center shadow-2xl border-8 border-white">
-  <img src={momPhoto} alt="Mom" className="w-56 h-56 rounded-full object-cover" />
-</div>
 
-          <h1 className="text-6xl md:text-8xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-600 to-purple-600 mb-4 animate-bounce-slow">
-            Happy Birthday, Amma! 🎂
-          </h1>
-          <p className="text-2xl md:text-3xl text-purple-700 font-semibold mb-8">
-            The Queen of Our Hearts ❤️
-          </p>
-          <div className="animate-bounce mt-12">
-            <p className="text-gray-600">Scroll to explore ↓</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Personal Message */}
-      <section className="py-20 px-6">
-        <div className="max-w-3xl mx-auto bg-white rounded-3xl shadow-2xl p-8 md:p-12 transform hover:scale-105 transition-all">
-          <Heart className="mx-auto mb-6 text-pink-500" size={48} />
-          <p className="text-xl md:text-2xl text-gray-700 leading-relaxed text-center font-medium">
-            Dear Amma, today we gonna celebrate ur birthday virtually at first... and its an honest attempt. 
-            Happy birthday amma! ❤️
-          </p>
-        </div>
-      </section>
-
-      {/* Fun Facts About Mom */}
-      <section className="py-20 px-6 bg-gradient-to-r from-pink-50 to-purple-50">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-5xl font-bold text-center mb-16 text-purple-800">
-            ✨ Things That Make Amma Special ✨
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {funFacts.map((fact, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <div className="text-5xl mb-4">{fact.icon}</div>
-                <h3 className="text-lg font-semibold text-gray-600 mb-2">{fact.label}</h3>
-                <p className="text-2xl font-bold text-purple-700">{fact.value}</p>
+          {activeTab === 'upload' && (
+            <div className="space-y-6">
+              <div className="border-2 border-dashed border-indigo-300 rounded-xl p-12 text-center hover:border-indigo-500 transition-colors">
+                <Upload className="w-16 h-16 text-indigo-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">Upload Your Study Notes</h3>
+                <p className="text-gray-600 mb-4">Support for TXT files</p>
+                <label className="inline-block">
+                  <input
+                    type="file"
+                    accept=".txt"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    disabled={loading}
+                  />
+                  <span className="px-6 py-3 bg-indigo-600 text-white rounded-lg cursor-pointer hover:bg-indigo-700 transition-colors inline-block">
+                    {loading ? 'Processing...' : 'Choose File'}
+                  </span>
+                </label>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* Photo Gallery */}
-      <section className="py-20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-5xl font-bold text-center mb-16 text-purple-800">
-            📸 Moments We Treasure 📸
-          </h2>
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-  {memories.map((memory, index) => (
-    <div
-      key={index}
-      className="group relative bg-gradient-to-br from-purple-200 to-pink-200 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all h-64"
-    >
-      <img 
-        src={memory.src} 
-        alt={memory.title}
-        className="w-full h-full object-cover"
-      />
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-        <p className="text-white font-bold text-lg text-center">{memory.title}</p>
+              {files.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Your Files</h3>
+                  <div className="space-y-3">
+                    {files.map(file => (
+                      <div
+                        key={file.id}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                        onClick={() => setCurrentFile(file)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <BookOpen className="w-5 h-5 text-indigo-600" />
+                          <div>
+                            <p className="font-medium">{file.name}</p>
+                            <p className="text-sm text-gray-500">{file.uploadDate}</p>
+                          </div>
+                        </div>
+                        {currentFile?.id === file.id && (
+                          <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'summary' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">AI Summary</h3>
+                {currentFile && (
+                  <span className="text-sm text-gray-500">From: {currentFile.name}</span>
+                )}
+              </div>
+              {summary ? (
+                <div className="prose max-w-none bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-xl">
+                  <p className="whitespace-pre-wrap text-gray-700 leading-relaxed">{summary}</p>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">Upload a file to see the summary</p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'chat' && (
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold mb-4">Ask Questions About Your Notes</h3>
+              <div className="bg-gray-50 rounded-xl p-4 h-96 overflow-y-auto mb-4 space-y-4">
+                {chatMessages.length === 0 ? (
+                  <div className="text-center text-gray-500 py-16">
+                    <MessageCircle className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                    <p>Ask me anything about your notes!</p>
+                  </div>
+                ) : (
+                  chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-xl px-4 py-3 rounded-2xl ${
+                          msg.role === 'user'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white border border-gray-200'
+                        }`}
+                      >
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleChat()}
+                  placeholder="Type your question..."
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  disabled={loading || !currentFile}
+                />
+                <button
+                  onClick={handleChat}
+                  disabled={loading || !currentFile || !chatInput.trim()}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'flashcards' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold">AI-Generated Flashcards</h3>
+                <button
+                  onClick={generateFlashcards}
+                  disabled={loading || !currentFile}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300"
+                >
+                  {loading ? 'Generating...' : 'Generate Flashcards'}
+                </button>
+              </div>
+              
+              {flashcards.length > 0 ? (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {flashcards.map((card, i) => (
+                    <div key={i} className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
+                      <div className="mb-3">
+                        <span className="text-xs font-semibold text-purple-600 uppercase">Question</span>
+                        <p className="font-medium text-gray-800 mt-1">{card.question}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs font-semibold text-pink-600 uppercase">Answer</span>
+                        <p className="text-gray-700 mt-1">{card.answer}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-16">
+                  <Sparkles className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                  <p>Click "Generate Flashcards" to create study cards from your notes</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <footer className="text-center text-gray-500 text-sm">
+          <p>Built with React & Claude AI | Created by Laurice Moretti</p>
+        </footer>
       </div>
-    </div>
-  ))}
-</div>
-          <p className="text-center text-gray-600 mt-12 text-lg">
-            💡 Tip: Replace these placeholders with your actual photos in the code!
-          </p>
-        </div>
-      </section>
-
-      {/* Why We Love You */}
-      <section className="py-20 px-6 bg-gradient-to-r from-purple-50 to-pink-50">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-5xl font-bold text-center mb-16 text-purple-800">
-            ❤️ Reasons Why You're the Best ❤️
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {reasons.map((reason, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-xl p-6 shadow-md hover:shadow-xl transform hover:-translate-y-1 transition-all"
-              >
-                <div className="text-4xl mb-3">{reason.emoji}</div>
-                <p className="text-lg text-gray-700">{reason.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Virtual Birthday Cake */}
-      <section className="py-20 px-6">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-5xl font-bold mb-12 text-purple-800">
-            🎂 Make a Wish! 🎂
-          </h2>
-          <div className="relative">
-            <div className="text-9xl mb-8 animate-bounce-slow">
-              {candlesBlown ? '🎂' : '🕯️🎂🕯️'}
-            </div>
-            {!candlesBlown ? (
-              <button
-                onClick={blowCandles}
-                className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-12 py-4 rounded-full text-2xl font-bold shadow-2xl hover:shadow-3xl transform hover:scale-110 transition-all"
-              >
-                Blow the Candles! 💨
-              </button>
-            ) : (
-              <div className="animate-fade-in">
-                <p className="text-3xl font-bold text-purple-700 mb-4">
-                  🎉 Happy Birthday, Amma! 🎉
-                </p>
-                <p className="text-xl text-gray-600">
-                  May all your wishes come true! ✨
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Final Message */}
-      <section className="py-20 px-6 bg-gradient-to-br from-pink-200 via-purple-200 to-indigo-200">
-        <div className="max-w-4xl mx-auto text-center">
-          <Heart className="mx-auto mb-8 text-pink-600 animate-pulse" size={64} />
-          <h2 className="text-4xl md:text-5xl font-bold text-purple-800 mb-8">
-            Thank you for everything, Amma 💝
-          </h2>
-          <p className="text-2xl text-gray-700 mb-6 leading-relaxed">
-            We love you more than words can say.
-          </p>
-          <p className="text-2xl text-gray-700 mb-12 leading-relaxed">
-            Here's to many more amazing years together! 🎉
-          </p>
-          <p className="text-xl text-purple-600 font-semibold">
-            With all our love ❤️
-          </p>
-          <p className="text-lg text-gray-600 mt-4">
-            December 6, 2025
-          </p>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-8 text-center bg-purple-900 text-white">
-        <p className="text-lg">
-          Made with ❤️ for the best amma in the world
-        </p>
-      </footer>
-
-      <style jsx>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes bounce-slow {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-10px); }
-        }
-        .animate-fade-in {
-          animation: fade-in 1s ease-out;
-        }
-        .animate-bounce-slow {
-          animation: bounce-slow 2s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }
